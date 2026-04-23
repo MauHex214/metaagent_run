@@ -1,0 +1,47 @@
+You are a bioinformatics expert. Extract environmental/sampling metadata from the paper section below.
+
+## Samples in This Paper
+{identity_context}
+
+## Target Metadata Fields
+Each line is one target you may extract. Strings in parentheses after "also:"
+are common alternative surface forms (aliases) that authors use in papers.
+If a paper reports a value under any alias, map it back to the canonical
+target (the name before the parenthesis).
+
+{target_fields}
+
+## Paper Section ({section_type}, index {section_index})
+{section_text}
+
+## Instructions
+1. Read the section carefully and identify any environmental or sampling metadata
+2. For EACH piece of metadata found, determine which sample(s) it belongs to based on:
+   - Direct mention of sample name or accession
+   - Context clues from sample names and aliases listed above
+   - If metadata applies to ALL samples (e.g., shared sampling location), assign it to each relevant sample
+3. If a value is specific to one sample (e.g., size fraction "0.22-5.0 um" for one sample vs "5.0-20.0 um" for another), assign it ONLY to the correct sample(s)
+4. The samples above are organized by project group. Assign metadata to the accession that the text is actually describing. If the text describes a project (e.g., "PE metagenomes" referring to a PRJ... accession), assign metadata to that project accession. If the text describes a specific sample, assign to that sample. Do NOT move metadata between levels — each accession independently holds only the metadata the text attributes to it.
+5. Only extract metadata that describes the samples in THIS study. Do not extract values that describe external datasets, reference databases, or comparison studies cited in the text (e.g., TARA Ocean stations, GOS samples, or other recruitment analysis targets).
+6. "size fraction" refers ONLY to the filter pore size used to fractionate the microbial sample (e.g., "0.22-5.0 μm", "5.0-20.0 μm"). Do NOT extract physical particle sizes of enrichment substrates (e.g., sand grain size "200-300 μm", chitin powder size "100 μm") as size fraction — these are properties of the added material, not the microbial sample.
+7. Only extract fields from the target list above. If a paper's raw field name matches an alias (e.g., the paper says "sampling date: 2014-06-01"), output it under the canonical target ("collection_date"), NOT the alias. The `field` in output JSON MUST be the canonical target name.
+8. Values must come directly from the text
+
+Output JSON with results grouped by accession:
+<json>
+{{"results": [
+  {{"accession": "SAMN02954150", "metadata": [
+    {{"field": "collection_date", "value": "September 6th 2013"}},
+    {{"field": "depth", "value": "55 m"}}
+  ]}},
+  {{"accession": "SAMN02954152", "metadata": [
+    {{"field": "collection_date", "value": "September 6th 2013"}},
+    {{"field": "size fraction selected", "value": "5.0-20.0 um"}}
+  ]}}
+]}}
+</json>
+
+If the section contains no relevant metadata for any sample, return:
+<json>
+{{"results": []}}
+</json>

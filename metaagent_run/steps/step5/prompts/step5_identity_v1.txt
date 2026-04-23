@@ -1,0 +1,37 @@
+You are a bioinformatics expert. Below are excerpts from a scientific paper describing data submission/accession information, along with a skeleton identity map built from external databases.
+
+Your task: Discover ALL aliases and names used in the paper to refer to each sample/accession.
+
+## Paper Excerpts (accession-related sections)
+{accession_sections_text}
+
+## Known Identity Skeleton (from external databases)
+{skeleton_context}
+
+## Verified Accessions Found in This Paper
+{verified_accessions_list}
+
+## Instructions
+The skeleton above already contains the database-registered sample names and project hierarchy. Your ONLY job is to find additional **aliases** — names, labels, or abbreviations the paper uses to refer to each sample.
+
+For EACH verified accession, identify:
+1. accession: The database identifier (must be one of the verified accessions above)
+2. aliases: ALL other names/labels the paper uses to refer to this sample, such as:
+   - Short labels (e.g., "FL-Summer", "PA-Winter", "Site A")
+   - Descriptive names (e.g., "free-living summer metagenome", "surface sediment sample")
+   - Submission names used in the text (e.g., "MedDCM-SEP2013")
+   - Group names (e.g., "FL metagenomes", "PE metagenomes")
+   - Fraction or category identifiers (e.g., "FL", "PA")
+
+IMPORTANT:
+- Only output accessions from the verified list above
+- Do NOT repeat the database sample name already shown in the skeleton — only add NEW aliases found in the paper text
+- If no additional aliases are found for an accession, output an empty aliases list
+- Include ALL name variants — even partial matches like "FL" when it clearly refers to this sample in context
+
+Output JSON:
+<json>
+{{"samples": [
+  {{"accession": "...", "aliases": ["...", "..."]}}
+]}}
+</json>

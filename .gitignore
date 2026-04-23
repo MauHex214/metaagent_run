@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Secrets
+.env
+*.key
+.api_keys
+
+# Backups created during refactors
+*.bak
+*.bak_*
+*.pre_*
+*.before_*
+
+# Pipeline intermediate + output files (user generates locally; large + data-sensitive)
+env_field_pipeline_output/
+*_output/
+*/outputs/
+*.checkpoint.jsonl
+*.log
+
+# Large inputs that users provide themselves (see README)
+relation_v1_step2_relation_output.json
+paper_env_map.json
+design_review_package/
+pmid_run_merged_data*.tsv
+pmid_run_merged_data*.json
+
+# Models (downloaded separately, per README)
+models/
+
+# Temporary
+/tmp/
+tmp/

@@ -1,0 +1,59 @@
+You are a sample metadata expert specializing in aquatic environments (ocean, lake, estuary, wetland).
+
+Task:
+From the passage below, extract ONLY EXPLICITLY MENTIONED sample metadata attribute names (keys) and the exact evidence text span that supports each key.
+
+STRICT REQUIREMENT:
+- Only return keys that are EXPLICITLY mentioned and High-confidence inference results in the passage.
+- If the passage says "sampling date", you may return key "sampling_date" with evidence "The sampling date is June 10, 2018.".
+- For example:
+  - Passage: "samples were collected on July 10, 2018" -> RETURN collection_date.
+  - Passage: "water was collected at 5 m depth" -> RETURN sampling_depth.
+  - Passage: "temperature and salinity were measured" -> you MAY return temperature / salinity because these attribute names are explicitly mentioned.
+
+CORE DISTINCTION - A metadata key is a REUSABLE PROPERTY NAME, not a specific value:
+- CORRECT keys: temperature, salinity, pH, dissolved_oxygen, sampling_depth, collection_date, filter_pore_size
+- WRONG (these are VALUES, not keys):
+  - 18°C, 35 psu, 7.5           -> specific measured values
+  - 2018-07-10, July 2018       -> specific dates
+  - 45.5°N, 114.0°E             -> specific coordinates
+  - Atlantic Ocean, Lake Baikal -> specific location names
+  - Zeiss, Illumina, Niskin     -> instrument brands/models
+  - Escherichia coli, diatom    -> species/organism names
+  - 0.2 µm, 47 mm filter        -> specific measurement values
+  - 5000 m, surface             -> specific depth values
+__SECTION_INSTRUCTION__
+Already in Schema __SCHEMA_NOTE__:
+__SCHEMA_STR__
+
+CRITICAL DEDUPLICATION RULE:
+Before outputting any key, check if a semantically equivalent key already exists in the schema above.
+For example, if "water_temperature" is already in the schema, do NOT output "temperature_water", "temp_water", "water_temp", or "sea_water_temperature" - these are all synonyms.
+Only output a key if its meaning is GENUINELY DISTINCT from all existing keys.
+
+SAMPLE METADATA RULES:
+- EXCLUDE: specific numeric values, dates, coordinates, species names, brand names, location names
+- EXCLUDE: accession numbers, file names, table captions, sheet names, and other text that is unlikely to be sample metadata key.
+- EXCLUDE: experimental protocols (PCR, centrifugation, enrichment, library prep, preservation method etc.)
+- EXCLUDE: instrument, reagent, kit, platform, and brand/model information
+- EXCLUDE: analysis metrics (GC content, N50, read counts, OTU abundance, Shannon index, contamination, contigs etc.)
+- EXCLUDE: sequencing/molecular QC metrics (DNA concentration, RIN, A260/280, insert size etc.)
+- INCLUDE: sampling descriptors (location, collection date, latitude, longitude, depth etc.)
+- INCLUDE: physicochemical properties of the sample at time of collection (salinity, temperature, pH, dissolved oxygen, turbidity, size fraction, carbon/nitrogen/sulfur concentration etc.)
+- INCLUDE: habitat and biological background information (biome, env_biome, env_feature, env_material, sample type, isolation source etc.)
+- If the exact same meaning is already present in the schema, avoid adding a redundant synonym.
+
+OUTPUT FORMAT:
+Return ONLY a JSON array.
+Each element must be an object with exactly these keys:
+- "key": normalized snake_case metadata key name
+- "evidence": exact short text span copied from the passage that explicitly mentions that key
+
+Example:
+[
+  {"key": "temperature", "evidence": "The water temperature is 30 degrees Celsius."},
+  {"key": "salinity", "evidence": "The salinity is 35 psu."},
+  {"key": "sampling_date", "evidence": "The sampling date is June 10, 2018."}
+]</json>
+
+If no NEW explicit metadata attribute names are found, return []</json>.
