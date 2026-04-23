@@ -1,0 +1,747 @@
+# Phase 6 schema decisions (machine-readable source of truth)
+#
+# Upstream: env5_main_list.csv (403 rows, bugfix version) + env5_signature_*.csv
+# Downstream: phase6 renderer produces env6_extraction_targets.json for step5
+#
+# Each `main_list` entry:
+#   target:              phase6 canonical name (uses normalized full-name form)
+#   subtype:             source subtype in env3/env4
+#   merge_from:          list of env5 main_list target_field_name values to merge
+#   merge_from_sig:      {env: [target_names]} to pull from signatures into main
+#   merge_from_subtype:  {subtype: [target_names]} to cross-subtype reassign
+#   extra_aliases:       hand-added aliases (not present in env5 data)
+#
+# Phase6 renderer behavior:
+#   - For each `target`, collect all raw_key from env5_main_list rows matching
+#     (subtype × merge_from) plus their member_raw_keys and merged_bag_variants.
+#   - aliases = set(member_raw_keys) ∪ extra_aliases — the target_name itself.
+#
+# Each signature entry:
+#   target:      signature canonical name
+#   env:         Open_ocean | Coastal_waters | Lake | Wetlands
+#   from_subtype: source subtype (for bookkeeping)
+#   merge_from:  env5 signature target_field_name(s) to collect aliases from
+
+version: 1
+generated_at: "2026-04-24"
+source_doc: "phase6_decisions.md v1"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# MAIN LIST — 66 targets
+# ═══════════════════════════════════════════════════════════════════════════
+main_list:
+
+  # ── Batch 1: unambiguous subtypes (17 targets) ────────────────────────
+
+  - target: salinity
+    subtype: salinity
+    merge_from: [salinity]
+
+  - target: temperature
+    subtype: temperature
+    merge_from: [temperature]
+
+  - target: ph
+    subtype: ph_alkalinity
+    merge_from: [ph]
+
+  - target: alkalinity
+    subtype: ph_alkalinity
+    merge_from: [alkalinity]
+
+  - target: conductivity
+    subtype: conductivity_tds
+    merge_from: [conductivity]
+
+  - target: total_dissolved_solids
+    subtype: conductivity_tds
+    merge_from: [total_dissolved_solid, total_dissolved_solids]
+
+  - target: chlorophyll_a
+    subtype: chlorophyll_pigment
+    merge_from: [chlorophyll_a, chlorophyll_a_concentration, chlorophyll_concentration]
+
+  - target: fluorescence
+    subtype: chlorophyll_pigment
+    merge_from: [fluorescence, chlorophyll_a_fluorescence, chlorophyll_fluorescence]
+
+  - target: turbidity
+    subtype: turbidity_transparency
+    merge_from: [turbidity, visibility, colour, water_clarity]
+
+  - target: secchi_depth
+    subtype: turbidity_transparency
+    # 收 vertical_position 里的 secchi_disk_depth
+    merge_from: [secchi_depth, transparency, secchi]
+    merge_from_subtype:
+      vertical_position: [secchi_disk_depth]
+
+  - target: suspended_particulate_matter
+    subtype: turbidity_transparency
+    merge_from: [suspended_particulate_matter, suspended_solids, tss]
+    merge_from_subtype:
+      conductivity_tds: [total_suspended_solids]
+
+  - target: latitude
+    subtype: geo_coord
+    merge_from: [latitude, latitude_range]
+    extra_aliases: [coordinates, geographic_coordinates, geographical_position, utm_coordinates]
+
+  - target: longitude
+    subtype: geo_coord
+    merge_from: [longitude, longitude_e, longitude_range, latitude_longitude]
+    extra_aliases: [coordinates, geographic_coordinates, utm_coordinates]
+
+  - target: dissolved_oxygen
+    subtype: oxygen
+    merge_from: [oxygen, dissolved_oxygen, oxygenation]
+
+  - target: oxygen_saturation
+    subtype: oxygen
+    merge_from: [oxygen_saturation]
+
+  # Force-split from shared BOD+COD canonical (phase4 EDC didn't separate):
+  - target: biochemical_oxygen_demand
+    subtype: oxygen
+    force_split_from_canonical:
+      env5_target: biological_oxygen_demand  # env5 target under which BOD+COD were merged
+      match_raw_keys: [bod, bod5, five_day_biochemical_oxygen_demand, "5-day_biochemical_oxygen_demand", biochemical_oxygen_demand, biological_oxygen_demand]
+
+  - target: chemical_oxygen_demand
+    subtype: oxygen
+    force_split_from_canonical:
+      env5_target: biological_oxygen_demand
+      match_raw_keys: [cod, chemical_oxygen_demand]
+
+  # ── Batch 2 Group 1: high-dispersion location/time/category (6) ───────
+
+  - target: water_depth
+    subtype: vertical_position
+    merge_from:
+      - depth
+      - sampling_depth
+      - water_depth
+      - sediment_depth
+      - max_depth
+      - mean_depth
+      - depth_range
+      - bottom_depth
+      - average_depth
+      - position
+      - collection_depth
+      - water_column_depth
+      - layer
+      - thermocline_depth
+      - maximum_depth
+      - water_layer
+      - soil_depth
+      - water_column
+      - depth_interval
+      - bathymetry
+      - core_depth
+      - mixed_layer_depth
+      - depth_layer
+      - depth_zone
+      - maximum_water_depth
+      - minimum_depth_in_meters
+      - depth_strata
+      - mean_water_depth
+      - euphotic_zone_depth
+      - sampling_layer
+      - photic_zone_depth
+      - depth_max
+      - sampled_depth
+      - min_depth
+      - depth_gradient
+      - oxygen_penetration_depth
+      - nitracline_depth
+      - bot_depth
+      - stratigraphic_depth
+      - halocline_depth
+      - sample_depths
+
+  - target: elevation
+    subtype: vertical_position
+    merge_from: [elevation, altitude, sea_level, elevation_range]
+
+  - target: ice_snow_thickness
+    subtype: vertical_position
+    merge_from: [ice_thickness, snow_depth]
+
+  - target: collection_date
+    subtype: time_point
+    merge_from:
+      - collection_date
+      - sampling_date
+      - date
+      - year
+      - sampling_time
+      - month
+      - time
+      - collection_year
+      - collection_time
+      - day
+      - sampling_month
+      - sample_date
+      - event_date
+      - start_date
+      - survey_date
+      - year_sampled
+      - time_of_day
+      - collection_month
+      - end_date
+      - date_time
+      - time_point
+      - start_time
+      - capture_date
+      - local_time
+      - survey_year
+      - hour
+      - month_year
+      - end_time
+      - date_deployed
+      - datetime
+      - observation_date
+      - day_of_year
+      - catch_date
+      - timestamp
+      - sampling_year
+    # Pull cross-subtype time stuff:
+    merge_from_subtype:
+      time_duration: [time_of_year, years]
+    # Pull signatures that should collapse into main:
+    merge_from_sig:
+      Open_ocean: [time_utc, day_night, event_time, local_date, date_time_utc]
+      Lake: [coring_date]
+
+  - target: sampling_location
+    subtype: sampling_site
+    merge_from:
+      - sampling_location
+      - sampling_site
+      - sampling_station
+      - sampling_locality
+      - sampling_point
+      - site_name
+      - transect
+      - site_code
+      - study_site
+      - station_name
+      - station_id
+      - sampling_areas
+      - type_locality
+      - city
+      - river_system
+      - bay
+      - survey_site
+
+  - target: habitat
+    subtype: habitat_biome
+    merge_from:
+      - habitat
+      - vegetation
+      - environment
+      - zone
+      - isolation_source
+      - vegetation_type
+      - site_type
+      - sampling_zone
+      - estuary
+      - biome
+      - intertidal_zone
+      - wetland
+      - pond_type
+      - biotope
+      - environment_feature
+      - vegetation_zone
+      - environment_biome
+      - littoral_zone
+
+  # ── Batch 2 Group 2: time_duration / geo_region / material (6) ────────
+
+  - target: season
+    subtype: time_duration
+    merge_from: [season, seasonal_period, summer_season, winter_season, growing_season]
+
+  - target: sampling_period
+    subtype: time_duration
+    merge_from: [sampling_period, collection_period, sampling_time_period, sampling_date_range]
+
+  - target: geographic_location
+    subtype: geo_region
+    merge_from:
+      - geographic_location
+      - region
+      - collection_country
+      - province
+      - sampling_region
+      - basin
+      - island
+      - coast
+      - geographic_area
+      - geo_loc_name
+      - subregion
+      - geography
+      - sub_region
+      - region_of_origin
+      - higher_geography
+      - sea_area
+      - river_basin
+
+  - target: sediment_type
+    subtype: material_medium_type
+    merge_from: [sediment_type, soil_type, sediment_layer, type_of_sample, environment_material]
+
+  - target: size_fraction
+    subtype: material_medium_type
+    merge_from: [size_fraction, mesh_size, filter_size]
+    # filter_pore_size 移过来（当前在 trace_chemistry 是 phase3 误判）
+    merge_from_subtype:
+      trace_chemistry: [filter_pore_size]
+
+  - target: grain_size_class
+    subtype: material_medium_type
+    merge_from: [clay, clay_content, sand_content, fine_sand]
+
+  # ── Batch 2 Group 3A: nutrient_chemistry (12) ─────────────────────────
+
+  - target: nitrate
+    subtype: nutrient_chemistry
+    merge_from: [nitrate, nitrate_nitrogen, nitrate_concentration]
+
+  - target: nitrite
+    subtype: nutrient_chemistry
+    merge_from: [nitrite, nitrite_nitrogen, nitrate_nitrite]
+
+  - target: ammonium
+    subtype: nutrient_chemistry
+    merge_from: [ammonium, ammonium_nitrogen, ammonia, ammonia_nitrogen, ammonium_concentration]
+
+  - target: phosphate
+    subtype: nutrient_chemistry
+    merge_from: [phosphate, phosphate_phosphorus, phosphate_concentration]
+
+  - target: silicate
+    subtype: nutrient_chemistry
+    merge_from: [silicate, silicic_acid]
+
+  - target: sulfate
+    subtype: nutrient_chemistry
+    merge_from: [sulfate, sulfate_concentration]
+
+  - target: methane
+    subtype: nutrient_chemistry
+    merge_from: [methane, methane_concentration]
+
+  - target: total_organic_carbon
+    subtype: nutrient_chemistry
+    merge_from: [total_organic_carbon]
+
+  - target: organic_matter_content
+    subtype: nutrient_chemistry
+    merge_from: [organic_matter_content, organic_matter]
+
+  - target: carbon_nitrogen_ratio
+    subtype: nutrient_chemistry
+    merge_from: [carbon_nitrogen_ratio, carbon_to_nitrogen_ratio]
+
+  - target: nitrogen_to_phosphorus_ratio
+    subtype: nutrient_chemistry
+    merge_from: [nitrogen_to_phosphorus_ratio, "n:p_ratio"]
+
+  - target: total_sulfur
+    subtype: nutrient_chemistry
+    merge_from: [total_sulfur]
+
+  # ── Batch 2 Group 3B: trace_chemistry (10 molecules + 4 sediment physical + 6 isotopes) ─
+
+  - target: iron
+    subtype: trace_chemistry
+    merge_from: [iron]
+
+  - target: copper
+    subtype: trace_chemistry
+    merge_from: [copper]
+
+  - target: arsenic
+    subtype: trace_chemistry
+    merge_from: [arsenic, as_concentration]
+
+  - target: chromium
+    subtype: trace_chemistry
+    merge_from: [chromium]
+
+  - target: potassium
+    subtype: trace_chemistry
+    merge_from: [potassium, available_potassium]
+
+  - target: sulfide
+    subtype: trace_chemistry
+    merge_from: [sulfide, hydrogen_sulfide, h2s_concentration, hydrogen_sulfide_concentration]
+
+  - target: carbonate_content
+    subtype: trace_chemistry
+    merge_from: [carbonate_content]
+
+  - target: total_hardness
+    subtype: trace_chemistry
+    merge_from: [total_hardness]
+
+  - target: sediment_grain_size
+    subtype: trace_chemistry
+    merge_from: [sediment_grain_size, particle_size]
+
+  - target: sediment_density
+    subtype: trace_chemistry
+    merge_from: [sediment_density, bulk_density]
+
+  - target: sediment_porosity
+    subtype: trace_chemistry
+    merge_from: [sediment_porosity]
+
+  - target: sediment_grain_size_stats
+    subtype: trace_chemistry
+    merge_from: [silt_content, mud_content, sorting, skewness]
+
+  - target: delta_c13
+    subtype: trace_chemistry
+    merge_from: ["δ13c", "δ13c_‰", delta13c, "13c"]
+
+  - target: delta_n15
+    subtype: trace_chemistry
+    merge_from: ["δ15n", "δ15n_‰", "15n"]
+
+  - target: delta_o18
+    subtype: trace_chemistry
+    merge_from: ["δ18o", d18o, "18o", delta18o]
+
+  - target: sr_isotope_ratio
+    subtype: trace_chemistry
+    merge_from: ["87sr_86sr"]
+
+  - target: aragonite_saturation
+    subtype: trace_chemistry
+    merge_from: ["ωaragonite", "ωarag", "ωa", "ωar"]
+
+  - target: calcite_saturation
+    subtype: trace_chemistry
+    merge_from: ["ωca", "ωcalc", "ωcalcite"]
+
+  - target: oxidation_reduction_potential
+    subtype: trace_chemistry
+    merge_from: [oxidation_reduction_potential]
+    extra_aliases: [orp, orp_mv, eh, eh_mv, "oxidation-reduction_potential"]
+
+  # ── Batch 3: edge subtypes (15) ───────────────────────────────────────
+
+  - target: river_discharge
+    subtype: spatial_metric
+    merge_from: [river_discharge, discharge, river_flow]
+
+  - target: slope
+    subtype: spatial_metric
+    merge_from: [slope]
+
+  - target: sedimentation_rate
+    subtype: spatial_metric
+    merge_from: [sedimentation_rate]
+
+  - target: precipitation
+    subtype: physical_env_driver
+    merge_from: [total_precipitation, runoff]
+
+  - target: wind_speed
+    subtype: physical_env_driver
+    merge_from: [wind_speed, wind]
+
+  - target: wind_direction
+    subtype: physical_env_driver
+    merge_from: [wind_direction]
+
+  - target: light_intensity
+    subtype: physical_env_driver
+    merge_from:
+      - light_intensity
+      - photoperiod
+      - light_dark_cycle
+      - light_attenuation
+      - photosynthetic_active_radiation
+      - photosynthetically_active_radiation
+      - par_irradiance
+      - light_penetration
+      - daylength
+    # Pull light_conditions from env_state_context:
+    merge_from_subtype:
+      env_state_context: [light_conditions]
+
+  - target: pressure
+    subtype: physical_env_driver
+    merge_from: [pressure]
+
+  - target: soil_moisture
+    subtype: physical_env_driver
+    merge_from: [soil_moisture, soil_moisture_content, soil_water_content]
+
+  - target: water_flow
+    subtype: physical_env_driver
+    merge_from: [current_velocity, flow_rate, velocity, current_direction, water_velocity, wave_height, wave_action]
+
+  - target: humidity
+    subtype: physical_env_driver
+    merge_from: [humidity, relative_humidity]
+
+  - target: water_level
+    subtype: physical_env_driver
+    merge_from: [water_level]
+    # Pull from vertical_position:
+    merge_from_subtype:
+      vertical_position: [tidal_elevation, tide_level, groundwater_level, groundwater_table]
+
+  - target: water_body_type
+    subtype: water_body_descriptor
+    merge_from: [lake, surface_water, water_body, ocean, river, water, sea, source_water, body_of_water]
+    merge_from_sig:
+      Lake: [pond, inflow, outflow]
+
+  - target: tidal_stage
+    subtype: env_state_context
+    merge_from: [tide, tide_condition, tidal_phase, tidal_zone, tidal_influence, tidal_condition, tidal_regime]
+
+  - target: water_quality_status
+    subtype: env_state_context
+    merge_from: [water_quality]
+
+  - target: land_use
+    subtype: env_state_context
+    merge_from: [land_use, land_use_type, land_cover]
+
+  - target: stratification
+    subtype: env_state_context
+    merge_from: [stratification, thermal_stratification, water_column_stratification]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SIGNATURES — per-env distinctive targets (细粒度保留，不合并)
+# ═══════════════════════════════════════════════════════════════════════════
+
+signatures:
+  Open_ocean:
+    - {target: station_number,      from_subtype: sampling_site,        merge_from: [station_number, station_no]}
+    - {target: hole,                from_subtype: sampling_site}
+    - {target: verbatim_locality,   from_subtype: sampling_site}
+    - {target: vent_site,           from_subtype: sampling_site}
+    - {target: pop_up_location,     from_subtype: sampling_site}
+    - {target: water_mass,          from_subtype: habitat_biome}
+    - {target: vent_field,          from_subtype: habitat_biome}
+    - {target: vent,                from_subtype: habitat_biome}
+    - {target: biogeographical_province, from_subtype: habitat_biome}
+    - {target: marine_biome,        from_subtype: habitat_biome}
+    - {target: marine_region,       from_subtype: habitat_biome}
+    - {target: ocean_region,        from_subtype: geo_region}
+    - {target: ocean_basin,         from_subtype: geo_region}
+    - {target: ocean_and_sea_region, from_subtype: geo_region}
+    - {target: fao_fishing_area,    from_subtype: geo_region}
+    - {target: longhurst_province,  from_subtype: geo_region}
+    - {target: h2,                  from_subtype: nutrient_chemistry}
+    - {target: poc_flux,            from_subtype: nutrient_chemistry}
+    - {target: particulate_organic_carbon, from_subtype: nutrient_chemistry}
+    - {target: total_dissolved_inorganic_carbon, from_subtype: nutrient_chemistry, merge_from: [total_dissolved_inorganic_carb]}
+    - {target: mg_ca,               from_subtype: trace_chemistry}
+    - {target: nd,                  from_subtype: trace_chemistry}
+    - {target: oxygen_isotope_composition, from_subtype: trace_chemistry}
+    - {target: fepy_fehr,           from_subtype: trace_chemistry}
+    - {target: dFe_concentration,   from_subtype: trace_chemistry}
+    - {target: potential_density_anomaly, from_subtype: trace_chemistry}
+    - {target: fehr_fet,            from_subtype: trace_chemistry}
+    - {target: sea_ice_concentration, from_subtype: physical_env_driver}
+    - {target: surface_par,         from_subtype: physical_env_driver}
+    - {target: stratification_index, from_subtype: physical_env_driver}
+    - {target: sea_ice_coverage,    from_subtype: env_state_context, merge_from: [sea_ice_coverage, sea_ice_cover, sea_ice_conditions]}
+    - {target: sea_ice_thickness,   from_subtype: spatial_metric}
+    - {target: size_fraction_thresholds, from_subtype: spatial_metric, merge_from: [size_fraction_upper_threshold, size_fraction_lower_threshold, bin_size]}
+    - {target: trench,              from_subtype: water_body_descriptor}
+
+  Coastal_waters:
+    - {target: reef_location,       from_subtype: sampling_site}
+    - {target: beach,               from_subtype: habitat_biome}
+    - {target: reef_type,           from_subtype: habitat_biome}
+    - {target: reef,                from_subtype: habitat_biome}
+    - {target: reef_zone,           from_subtype: habitat_biome}
+    - {target: benthic_cover,       from_subtype: habitat_biome}
+    - {target: habitat_complexity,  from_subtype: habitat_biome}
+    - {target: structural_complexity, from_subtype: habitat_biome}
+    - {target: shelf_position,      from_subtype: geo_region}
+    - {target: beach_type,          from_subtype: material_medium_type}
+    - {target: aragonite_saturation_state, from_subtype: trace_chemistry, merge_from: ["ωarag"]}
+    - {target: total_suspended_matter, from_subtype: trace_chemistry}
+    - {target: wave_energy,         from_subtype: physical_env_driver}
+    - {target: fishing_pressure,    from_subtype: env_state_context}
+    - {target: area_covered,        from_subtype: spatial_metric}
+    - {target: beach_width,         from_subtype: spatial_metric}
+
+  Lake:
+    - {target: lake_name,           from_subtype: sampling_site}
+    - {target: water_residence_time, from_subtype: time_duration, merge_from: [water_residence_time, residence_time]}
+    - {target: lake_region,         from_subtype: geo_region}
+    - {target: permafrost,          from_subtype: material_medium_type}
+    - {target: major_ions,          from_subtype: trace_chemistry}
+    - {target: total_salts,         from_subtype: trace_chemistry}
+    - {target: lake_area,           from_subtype: spatial_metric, merge_from: [lake_area, lake_size, lake_surface_area]}
+    - {target: pond_area,           from_subtype: spatial_metric}
+    - {target: river_width,         from_subtype: spatial_metric}
+    - {target: river_length,        from_subtype: spatial_metric}
+    - {target: total_storage_capacity, from_subtype: spatial_metric}
+    - {target: shoreline_development, from_subtype: spatial_metric}
+    - {target: lake_type,           from_subtype: env_state_context}
+    - {target: mixing_type,         from_subtype: env_state_context}
+    - {target: impervious,          from_subtype: env_state_context}
+
+  Wetlands:
+    - {target: peat_depth,          from_subtype: vertical_position}
+    - {target: water_table_depth,   from_subtype: vertical_position, merge_from: [water_table_depth, water_table_level]}
+    - {target: intertidal_elevation, from_subtype: vertical_position, merge_from: [intertidal_elevation, shore_elevation]}
+    - {target: inundation,          from_subtype: vertical_position}
+    - {target: wetland_type,        from_subtype: habitat_biome}
+    - {target: dominant_vegetation, from_subtype: habitat_biome}
+    - {target: peatland_type,       from_subtype: habitat_biome}
+    - {target: microhabitat,        from_subtype: habitat_biome}
+    - {target: forest_type,         from_subtype: habitat_biome}
+    - {target: marsh_type,          from_subtype: habitat_biome}
+    - {target: marsh,               from_subtype: habitat_biome}
+    - {target: wetland_area,        from_subtype: spatial_metric}
+    - {target: total_potassium,     from_subtype: trace_chemistry}
+    - {target: peat_type,           from_subtype: material_medium_type}
+    - {target: microtopography,     from_subtype: env_state_context}
+    - {target: flood_frequency,     from_subtype: env_state_context}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# EXCLUDED TARGETS (R1-R4) — explicit rejection list with reason codes
+# ═══════════════════════════════════════════════════════════════════════════
+
+excluded:
+  # R1: PMID 覆盖度阈值低
+  - {env5_target: pheophytin,                subtype: chlorophyll_pigment,       reason: R1, detail: "pmid=20 叶绿素降解副产物"}
+  - {env5_target: phaeopigment,              subtype: chlorophyll_pigment,       reason: R1, detail: "pmid=22 同上"}
+  - {env5_target: urea,                      subtype: nutrient_chemistry,        reason: R1, detail: "pmid=11"}
+  # R1+R2: 低 pmid + 量纲不同
+  - {env5_target: primary_productivity,      subtype: chlorophyll_pigment,       reason: R2, detail: "gC/m²/d 通量与色素浓度量纲不同"}
+  - {env5_target: productivity,              subtype: chlorophyll_pigment,       reason: R2, detail: "同 primary_productivity"}
+
+  # R2: 量纲冲突
+  - {env5_target: temperature_gradient,      subtype: temperature,               reason: R2, detail: "°C/m vs °C 量纲不同"}
+  - {env5_target: filter_diameter,           subtype: turbidity_transparency,    reason: R3, detail: "过滤器规格非环境"}
+  - {env5_target: phosphorus_pentoxide,      subtype: nutrient_chemistry,        reason: R3, detail: "P2O5 地质氧化物"}
+
+  # R3: 语义偏离样本环境元数据
+  - {env5_target: age_ma,                    subtype: time_point,                reason: R3, detail: "地质年代"}
+  - {env5_target: isolation_date,            subtype: time_point,                reason: R3, detail: "菌株分离时间"}
+  - {env5_target: core,                      subtype: sampling_site,             reason: R3, detail: "样品容器非地点"}
+  - {env5_target: sampling_device,           subtype: sampling_site,             reason: R3, detail: "采样器具"}
+  - {env5_target: stranding_location,        subtype: sampling_site,             reason: R3, detail: "海洋哺乳动物搁浅地点"}
+  - {env5_target: release_location,          subtype: sampling_site,             reason: R3, detail: "标记放生地点"}
+  - {env5_target: vegetation_cover,          subtype: habitat_biome,             reason: R3, detail: "覆盖度数值非生境类型"}
+  - {env5_target: macrophyte_cover,          subtype: habitat_biome,             reason: R3, detail: "同上"}
+  - {env5_target: macroalgae_cover,          subtype: habitat_biome,             reason: R3, detail: "同上"}
+  - {env5_target: day_length,                subtype: time_duration,             reason: R3, detail: "日照时长属 physical_env_driver 范畴但 pmid 低"}
+  - {env5_target: flooding_duration,         subtype: time_duration,             reason: R3, detail: "Wetlands 特征但 pmid 低"}
+  - {env5_target: ice_cover_duration,        subtype: time_duration,             reason: R3, detail: "OO/Lake 特征但 pmid 低"}
+  - {env5_target: latitudinal_gradient,      subtype: geo_region,                reason: R3, detail: "研究设计沿纬度梯度"}
+  - {env5_target: rock_type,                 subtype: material_medium_type,      reason: R3, detail: "地质学"}
+  - {env5_target: mineralogy,                subtype: material_medium_type,      reason: R3, detail: "地质学"}
+  - {env5_target: lithology,                 subtype: material_medium_type,      reason: R3, detail: "地质学"}
+  - {env5_target: formation,                 subtype: material_medium_type,      reason: R3, detail: "地质学地层"}
+  - {env5_target: quartz,                    subtype: trace_chemistry,           reason: R3, detail: "地质矿物"}
+  - {env5_target: mineral_composition,       subtype: trace_chemistry,           reason: R3, detail: "地质矿物学"}
+  - {env5_target: net_type,                  subtype: material_medium_type,      reason: R3, detail: "采样网具"}
+  - {env5_target: color,                     subtype: material_medium_type,      reason: R3, detail: "混合water/sediment color歧义"}
+  - {env5_target: seawater,                  subtype: material_medium_type,      reason: R3, detail: "是值不是字段名"}
+  - {env5_target: dissolved_inorganic_nutrients, subtype: nutrient_chemistry,    reason: R3, detail: "泛指DIN混合"}
+  - {env5_target: inorganic_nutrients,       subtype: nutrient_chemistry,        reason: R3, detail: "泛指"}
+  - {env5_target: macronutrient_concentrations, subtype: nutrient_chemistry,     reason: R3, detail: "泛指"}
+  - {env5_target: nutrient_availability,     subtype: nutrient_chemistry,        reason: R3, detail: "泛指"}
+  - {env5_target: carbon,                    subtype: nutrient_chemistry,        reason: R3, detail: "太泛 (可能是TC/TOC/DOC/POC)"}
+  - {env5_target: pn,                        subtype: nutrient_chemistry,        reason: R3, detail: "歧义未消"}
+  - {env5_target: heavy_metals,              subtype: trace_chemistry,           reason: R3, detail: "泛指非具体元素"}
+  - {env5_target: sediment_metals,           subtype: trace_chemistry,           reason: R3, detail: "泛指"}
+  - {env5_target: ion_concentration,         subtype: trace_chemistry,           reason: R3, detail: "泛指"}
+  - {env5_target: cs,                        subtype: trace_chemistry,           reason: R3, detail: "歧义 (cesium? chloride+sulfate?)"}
+  - {env5_target: ct,                        subtype: trace_chemistry,           reason: R3, detail: "歧义 (carbon total? conductivity temp?)"}
+  - {env5_target: potassium_oxide,           subtype: trace_chemistry,           reason: R3, detail: "地质主量氧化物"}
+  - {env5_target: calcium_oxide,             subtype: trace_chemistry,           reason: R3, detail: "同上"}
+  - {env5_target: aluminum_oxide,            subtype: trace_chemistry,           reason: R3, detail: "同上"}
+  - {env5_target: titanium_oxide,            subtype: trace_chemistry,           reason: R3, detail: "同上"}
+  - {env5_target: magnesium_oxide,           subtype: trace_chemistry,           reason: R3, detail: "同上"}
+  - {env5_target: water_column_stratification, subtype: physical_env_driver,     reason: R3, detail: "归env_state_context stratification"}
+  - {env5_target: phase,                     subtype: physical_env_driver,       reason: R3, detail: "歧义"}
+  - {env5_target: surface,                   subtype: water_body_descriptor,     reason: R3, detail: "太泛 (水面还是其他表面)"}
+  - {env5_target: hydrology,                 subtype: water_body_descriptor,     reason: R3, detail: "学科名"}
+  - {env5_target: coastline,                 subtype: water_body_descriptor,     reason: R3, detail: "地理概念"}
+  - {env5_target: environmental_variables,   subtype: env_state_context,         reason: R3, detail: "泛指"}
+  - {env5_target: climate,                   subtype: env_state_context,         reason: R3, detail: "泛指"}
+  - {env5_target: condition,                 subtype: env_state_context,         reason: R3, detail: "泛指"}
+  - {env5_target: environmental_conditions,  subtype: env_state_context,         reason: R3, detail: "泛指"}
+  - {env5_target: water_source,              subtype: env_state_context,         reason: R3, detail: "泛指"}
+  - {env5_target: exposure,                  subtype: env_state_context,         reason: R3, detail: "研究设计/扰动"}
+  - {env5_target: wave_exposure,             subtype: env_state_context,         reason: R3, detail: "研究设计"}
+  - {env5_target: water_masses,              subtype: env_state_context,         reason: R3, detail: "研究设计"}
+  - {env5_target: sea_state,                 subtype: env_state_context,         reason: R3, detail: "研究设计"}
+  - {env5_target: geomorphology,             subtype: env_state_context,         reason: R3, detail: "学科"}
+  - {env5_target: protection_level,          subtype: env_state_context,         reason: R3, detail: "研究设计/政策"}
+  - {env5_target: human_impact,              subtype: env_state_context,         reason: R3, detail: "研究设计"}
+  - {env5_target: depth_category,            subtype: env_state_context,         reason: R3, detail: "模糊分类"}
+  - {env5_target: vegetation_coverage,       subtype: env_state_context,         reason: R3, detail: "同 vegetation_cover"}
+  - {env5_target: sea_ice,                   subtype: env_state_context,         reason: R3, detail: "pmid低 OO signature"}
+  - {env5_target: snow_cover,                subtype: env_state_context,         reason: R3, detail: "pmid低"}
+  - {env5_target: ice_cover,                 subtype: env_state_context,         reason: R3, detail: "pmid低"}
+  - {env5_target: inundation_frequency,      subtype: env_state_context,         reason: R3, detail: "合入 Wet signature flood_frequency"}
+  - {env5_target: canopy_cover,              subtype: env_state_context,         reason: R3, detail: "pmid低"}
+  # spatial_metric R3 批量
+  - {env5_target: surface_area,              subtype: spatial_metric,            reason: R3, detail: "研究区域面积"}
+  - {env5_target: distance,                  subtype: spatial_metric,            reason: R3, detail: "研究区域距离"}
+  - {env5_target: sampling_area,             subtype: spatial_metric,            reason: R3, detail: "研究区域面积"}
+  - {env5_target: distance_from_shore,       subtype: spatial_metric,            reason: R3}
+  - {env5_target: total_core_length,         subtype: spatial_metric,            reason: R3}
+  - {env5_target: catchment_area,            subtype: spatial_metric,            reason: R3}
+  - {env5_target: distance_from_coast,       subtype: spatial_metric,            reason: R3}
+  - {env5_target: width,                     subtype: spatial_metric,            reason: R3}
+  - {env5_target: distance_to_shore,         subtype: spatial_metric,            reason: R3}
+  - {env5_target: watershed_area,            subtype: spatial_metric,            reason: R3}
+  - {env5_target: water_area,                subtype: spatial_metric,            reason: R3}
+  - {env5_target: distance_offshore,         subtype: spatial_metric,            reason: R3}
+  - {env5_target: distance_to_coast,         subtype: spatial_metric,            reason: R3}
+  - {env5_target: perimeter,                 subtype: spatial_metric,            reason: R3}
+  - {env5_target: ap,                        subtype: spatial_metric,            reason: R3, detail: "歧义"}
+  - {env5_target: sediment_thickness,        subtype: spatial_metric,            reason: R3}
+  - {env5_target: drainage_area,             subtype: spatial_metric,            reason: R3}
+  - {env5_target: distance_from_river_mouth, subtype: spatial_metric,            reason: R3}
+  - {env5_target: distance_from_coastline,   subtype: spatial_metric,            reason: R3}
+  - {env5_target: survey_area,               subtype: spatial_metric,            reason: R3}
+  - {env5_target: sediment_core_length,      subtype: spatial_metric,            reason: R3}
+  - {env5_target: distance_to_land,          subtype: spatial_metric,            reason: R3}
+  - {env5_target: shoreline,                 subtype: spatial_metric,            reason: R3}
+  - {env5_target: forest,                    subtype: spatial_metric,            reason: R3}
+  - {env5_target: speed,                     subtype: spatial_metric,            reason: R3}
+  - {env5_target: distance_from_vent,        subtype: spatial_metric,            reason: R3}
+  - {env5_target: distance_from_mouth,       subtype: spatial_metric,            reason: R3}
+  - {env5_target: site_area,                 subtype: spatial_metric,            reason: R3}
+  - {env5_target: coastal_area,              subtype: spatial_metric,            reason: R3}
+
+  # R4: 组合字段
+  - {env5_target: coordinates,               subtype: geo_coord,                 reason: R4, detail: "lat+lon组合值"}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# STEP5 TIER ASSIGNMENT
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# For each paper in step5:
+#   tier1 = main_list (all 66, regardless of env)
+#   tier2 = signatures for the paper's dominant env(s)
+#
+# step5.upstream_loader._get_union_target_fields() will merge tier1+tier2
+# per paper's involved envs.
+
+tier_strategy:
+  tier1: main_list_all   # 所有 66 条主 target 对所有 paper 可见
+  tier2: env_signature   # paper 所属 env(s) 的 signature targets

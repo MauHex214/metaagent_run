@@ -1,0 +1,70 @@
+name: Mirror env_field_pipeline → hydrosphere_meta_norm
+
+# Keep the standalone hydrosphere_meta_norm repo in sync with the
+# metaagent_run monorepo for the shared subtrees:
+#   - metaagent_run/core/
+#   - metaagent_run/steps/env_field_pipeline/
+#   - docs/
+#
+# Only triggers when those paths change on main. README / requirements /
+# other steps / .gitignore in hydrosphere_meta_norm are left untouched
+# because the two repos' root-level docs intentionally differ.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "metaagent_run/core/**"
+      - "metaagent_run/steps/env_field_pipeline/**"
+      - "docs/**"
+      - ".github/workflows/mirror-to-hydrosphere-meta-norm.yml"
+  workflow_dispatch: {}
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout metaagent_run (source)
+        uses: actions/checkout@v4
+        with:
+          path: src
+          fetch-depth: 1
+
+      - name: Checkout hydrosphere_meta_norm (target)
+        uses: actions/checkout@v4
+        with:
+          repository: MauHex214/hydrosphere_meta_norm
+          token: ${{ secrets.HYDROSPHERE_MIRROR_TOKEN }}
+          path: tgt
+          fetch-depth: 1
+
+      - name: Sync shared subtrees
+        run: |
+          set -euo pipefail
+          # Only the shared paths are mirrored. --delete keeps deletions in sync too.
+          rsync -a --delete src/metaagent_run/core/ tgt/metaagent_run/core/
+          rsync -a --delete src/metaagent_run/steps/env_field_pipeline/ tgt/metaagent_run/steps/env_field_pipeline/
+          rsync -a --delete src/docs/ tgt/docs/
+
+      - name: Commit + push if there are changes
+        working-directory: tgt
+        run: |
+          set -euo pipefail
+          git config user.name  "metaagent-run-mirror-bot"
+          git config user.email "metaagent-run-mirror-bot@users.noreply.github.com"
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "No changes to mirror."
+            exit 0
+          fi
+          git add -A metaagent_run/core metaagent_run/steps/env_field_pipeline docs
+          src_sha="${{ github.sha }}"
+          src_ref_short="${src_sha:0:7}"
+          git commit -m "Mirror from metaagent_run@${src_ref_short}
+
+Auto-synced paths:
+  - metaagent_run/core/
+  - metaagent_run/steps/env_field_pipeline/
+  - docs/
+
+Source: https://github.com/${{ github.repository }}/commit/${src_sha}"
+          git push
