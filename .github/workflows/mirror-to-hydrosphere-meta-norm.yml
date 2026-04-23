@@ -48,6 +48,9 @@ jobs:
 
       - name: Commit + push if there are changes
         working-directory: tgt
+        env:
+          SRC_REPO: ${{ github.repository }}
+          SRC_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           git config user.name  "metaagent-run-mirror-bot"
@@ -57,14 +60,9 @@ jobs:
             exit 0
           fi
           git add -A metaagent_run/core metaagent_run/steps/env_field_pipeline docs
-          src_sha="${{ github.sha }}"
-          src_ref_short="${src_sha:0:7}"
-          git commit -m "Mirror from metaagent_run@${src_ref_short}
-
-Auto-synced paths:
-  - metaagent_run/core/
-  - metaagent_run/steps/env_field_pipeline/
-  - docs/
-
-Source: https://github.com/${{ github.repository }}/commit/${src_sha}"
+          SRC_REF_SHORT="${SRC_SHA:0:7}"
+          git commit \
+            -m "Mirror from metaagent_run@${SRC_REF_SHORT}" \
+            -m "Auto-synced paths: metaagent_run/core/, metaagent_run/steps/env_field_pipeline/, docs/" \
+            -m "Source: https://github.com/${SRC_REPO}/commit/${SRC_SHA}"
           git push
