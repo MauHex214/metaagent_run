@@ -229,36 +229,25 @@ def _format_targets_with_aliases(
 
 def build_metadata_keywords(
     target_fields: List[str],
-    field_to_mixs: Dict[str, str],
+    target_field_aliases: Dict[str, List[str]],
 ) -> Set[str]:
-    """Build dynamic metadata keyword set from upstream MIxS data.
-
-    Combines:
-    - Tokens from target field names (tier1 + tier2)
-    - Tokens from all known raw_field synonyms (mapping_result)
-
-    This replaces the static _META_FALLBACK_KEYWORDS.
-    """
+    """Build dynamic metadata keyword set from target field names + their
+    aliases (sourced from env6 phase6 output). Keywords filter table column
+    headers in the structured-table parser."""
     keywords: Set[str] = set()
 
-    # Add tokens from target field names
-    for field in target_fields:
-        norm = field.strip().lower()
-        # Don't strip parenthesized content — it may contain keywords like "latitude"
-        norm = re.sub(r"[^a-zA-Z0-9]+", "_", norm).strip("_")
-        for token in norm.split("_"):
-            if len(token) >= 2:  # skip single chars
-                keywords.add(token)
-
-    # Add tokens from all known synonym raw_field names
-    for raw_field in field_to_mixs.keys():
-        norm = raw_field.strip().lower()
-        norm = re.sub(r"[^a-zA-Z0-9]+", "_", norm).strip("_")
+    def _add_tokens(name: str) -> None:
+        norm = re.sub(r"[^a-zA-Z0-9]+", "_", name.strip().lower()).strip("_")
         for token in norm.split("_"):
             if len(token) >= 2:
                 keywords.add(token)
 
-    # Remove overly generic tokens that would cause false positives
+    for field in target_fields:
+        _add_tokens(field)
+    for aliases in target_field_aliases.values():
+        for alias in aliases:
+            _add_tokens(alias)
+
     _TOO_GENERIC = {
         "of", "or", "and", "the", "in", "on", "at", "to", "by", "is",
         "from", "for", "with", "not", "no", "an", "as",
@@ -449,7 +438,6 @@ def extract_table_metadata(
     table_parser: StructuredTableParser,
     paper_ctx: PaperContext,
     pmid: str,
-    upstream_field_to_mixs: Optional[Dict[str, str]] = None,
     max_cols: int = 50,
 ) -> Dict[str, List[str]]:
     """
@@ -465,9 +453,8 @@ def extract_table_metadata(
     result: Dict[str, List[str]] = {}
     target_fields = paper_ctx.tier1_fields + paper_ctx.tier2_fields
 
-    # Build dynamic metadata keywords from upstream MIxS data
     metadata_keywords = build_metadata_keywords(
-        target_fields, upstream_field_to_mixs or {},
+        target_fields, paper_ctx.target_field_aliases,
     )
 
     for section in sections:

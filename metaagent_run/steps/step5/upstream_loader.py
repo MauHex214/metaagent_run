@@ -47,16 +47,10 @@ class UpstreamData:
     # step4 env_tag: biosample_id → env value
     env_by_biosample: Dict[str, str] = field(default_factory=dict)
 
-    # env_extraction_targets: env → [{field, slot, tier, ...}, ...]
+    # env_extraction_targets: env → [{field, tier, subtype, aliases, ...}, ...]
     env_target_fields: Dict[str, List[Dict[str, Any]]] = field(default_factory=dict)
     # 全局字段 (Universal/Shared/Signature)
     global_fields: Dict[str, List[Dict[str, Any]]] = field(default_factory=dict)
-
-    # field_to_mixs: raw_field(lower) → mixs_slot (built from env_targets + synonym_groups)
-    field_to_mixs: Dict[str, str] = field(default_factory=dict)
-
-    # synonym_groups: canonical → [alias1, alias2, ...]
-    synonym_groups: Dict[str, List[str]] = field(default_factory=dict)
 
     # ── 查询方法 ──────────────────────────────────────────
 
@@ -542,72 +536,6 @@ def _compress_to_biosample_level(
 # ═══════════════════════════════════════════════════════════
 
 
-def _build_field_to_mixs(ud: "UpstreamData") -> None:
-    """Build field_to_mixs from env_extraction_targets + synonym_groups.
-
-    3 steps:
-    Step 1: Direct injection from env_targets field→slot (human-readable forms)
-    Step 2: Synonym expansion — for each env_targets field, find its synonym group
-            and expand all aliases to the same slot
-    Step 3: Underscore ↔ space variants for all entries
-    """
-    field_to_mixs: Dict[str, str] = {}
-
-    # Collect all field→slot from env_targets (all envs + global)
-    target_field_slot: Dict[str, str] = {}
-    for env_fields in ud.env_target_fields.values():
-        for f in env_fields:
-            slot = f.get("slot", "")
-            field_name = f.get("field", "")
-            if field_name and slot:
-                target_field_slot[field_name.lower()] = slot
-    for cat_fields in ud.global_fields.values():
-        for f in cat_fields:
-            slot = f.get("slot", "")
-            field_name = f.get("field", "")
-            if field_name and slot:
-                target_field_slot[field_name.lower()] = slot
-
-    # Step 1: Direct injection
-    for field_lower, slot in target_field_slot.items():
-        field_to_mixs[field_lower] = slot
-
-    # Step 2: Synonym expansion
-    for field_lower, slot in target_field_slot.items():
-        # Try to find this field in synonym_groups
-        # Match by: exact, underscore form, or as a member
-        underscore = field_lower.replace(" ", "_").replace("-", "_")
-        matched_group = None
-        for canonical, members in ud.synonym_groups.items():
-            all_lower = {canonical.lower()}
-            for m in members:
-                all_lower.add(m.lower())
-            if field_lower in all_lower or underscore in all_lower:
-                matched_group = (canonical, members)
-                break
-        if matched_group:
-            canonical, members = matched_group
-            field_to_mixs[canonical.lower()] = slot
-            for member in members:
-                field_to_mixs[member.lower()] = slot
-
-    # Step 3: Underscore ↔ space variants
-    additions: Dict[str, str] = {}
-    for key, slot in field_to_mixs.items():
-        # space → underscore
-        underscore = key.replace(" ", "_").replace("-", "_")
-        if underscore not in field_to_mixs:
-            additions[underscore] = slot
-        # underscore → space
-        spaced = key.replace("_", " ")
-        if spaced not in field_to_mixs:
-            additions[spaced] = slot
-    field_to_mixs.update(additions)
-
-    ud.field_to_mixs = field_to_mixs
-    LOGGER.info("Built field_to_mixs: %d entries (from %d target fields + %d synonym groups)",
-                len(field_to_mixs), len(target_field_slot), len(ud.synonym_groups))
-
 def load_upstream(
     relation_file: str = "",
     accession_file: str = "",
@@ -615,7 +543,6 @@ def load_upstream(
     expanded_metadata_file: str = "",
     env_tag_file: str = "",
     env_extraction_targets_file: str = "",
-    schema_discovery_file: str = "",
 ) -> UpstreamData:
     """一次性加载所有上游产物。各文件缺失时对应索引为空，不报错。"""
     ud = UpstreamData()
@@ -724,15 +651,5 @@ def load_upstream(
             ud.env_target_fields[env_name] = env_data.get("fields", [])
         ud.global_fields = data.get("global_fields", {})
         LOGGER.info("Loaded env extraction targets: %d envs", len(ud.env_target_fields))
-
-    # ── schema_discovery (synonym_groups) + env_targets → field_to_mixs ──
-    if schema_discovery_file and Path(schema_discovery_file).exists():
-        with open(schema_discovery_file, "r", encoding="utf-8") as f:
-            sd_data = json.load(f)
-        ud.synonym_groups = sd_data.get("synonym_groups", {})
-        LOGGER.info("Loaded synonym_groups: %d groups", len(ud.synonym_groups))
-
-    # Build field_to_mixs from env_targets + synonym_groups expansion
-    _build_field_to_mixs(ud)
 
     return ud

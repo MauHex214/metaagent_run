@@ -42,7 +42,6 @@ SECTION_CONCURRENCY: Final[int] = 8    # 单篇论文内 Phase B3 section 并发
 # ── Prompt 模板文件名 ────────────────────────────────────
 PROMPT_IDENTITY: Final[str] = "step5_identity_v1.txt"
 PROMPT_SECTION_EXTRACT: Final[str] = "step5_section_extract_v1.txt"
-PROMPT_FIELD_NORM: Final[str] = "step5_field_norm_v1"  # prompt_builder 不带 .txt
 
 
 @dataclass(frozen=True)
@@ -79,20 +78,18 @@ class RuntimeConfig:
     # Prompt 模板
     prompt_identity: str = PROMPT_IDENTITY
     prompt_section_extract: str = PROMPT_SECTION_EXTRACT
-    prompt_field_norm: str = PROMPT_FIELD_NORM
     # 日志
     failed_log_file: str = "step5_failed.log"
     # ── 上游文件路径（运行时指定） ────────────────────────
-    input_file: str = "target_env_v2_relation_input.json"
+    input_file: str = "target_env_v1_relation_input.json"
     output_file: str = "step5_output.json"
     # 上游产物
     relation_file: str = "relation_v1_step2_relation_output.json"            # step2 relation output
     accession_file: str = ""           # step3 accession output
-    accession_list_file: str = "accession_list.tsv"      # 外部 DB 验证 accession list
+    accession_list_file: str = "pmid_run-accession0418.list"      # 外部 DB 验证 accession list
     expanded_metadata_file: str = "pmid_run_merged_data_expanded.json"   # pmid_run_merged_data_expanded.json
-    env_tag_file: str = "env_tag_v1_step4a_env_tag_output.json"             # step4 env_tag output
-    env_extraction_targets_file: str = "step4_metadata_extend_output-gpt-mixs/step4b_env_extraction_targets.json"   # env_extraction_targets.json
-    schema_discovery_file: str = "step3_schema_discovery_result.json"      # schema_discovery (synonym_groups)
+    env_tag_file: str = "env_tag_v2_step4a_env_tag_output.json"             # step4 env_tag output
+    env_extraction_targets_file: str = "env_field_pipeline_output/env6_extraction_targets.json"   # phase6 output
 
 
 def load_runtime_config(**overrides) -> RuntimeConfig:

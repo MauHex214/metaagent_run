@@ -12,7 +12,7 @@ def parse_args() -> argparse.Namespace:
 
     # 主输入/输出（均可选，默认从 config 读取）
     p.add_argument("--input", dest="input_file", default=None,
-                   help="target_env_v2_relation_input.json")
+                   help="target_env_v1_relation_input.json")
     p.add_argument("--output", dest="output_file", default=None,
                    help="输出文件路径")
 
@@ -28,9 +28,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--env-tag", dest="env_tag_file", default=None,
                    help="step4 env_tag output JSON")
     p.add_argument("--env-targets", dest="env_extraction_targets_file", default=None,
-                   help="env_extraction_targets.json")
-    p.add_argument("--schema-discovery", dest="schema_discovery_file", default=None,
-                   help="schema_discovery_result_review-gpt-mixs.json (synonym_groups)")
+                   help="env_extraction_targets.json (phase6 output)")
 
     # 运行参数
     p.add_argument("--paper-concurrency", dest="paper_concurrency", type=int, default=None)

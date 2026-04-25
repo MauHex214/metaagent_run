@@ -1,12 +1,14 @@
-"""Step5_test orchestrator: Paper-level 3-phase pipeline (v2 refactor).
+"""Step5 orchestrator: paper-level pipeline (post-MIxS-decoupling refactor).
 
-Phase A: Identity Resolution -- resolve_identities() per paper
+Phase A: Identity Resolution — resolve_identities() per paper
 Phase B: Metadata Extraction
   - B1+B2: Table metadata extraction (structured tables)
   - B3: LLM per-section metadata extraction with identity map injection
-Phase C: Global normalization + finalization
-  - C1: LLM field normalization (collect raw fields -> MIxS mapping)
-  - C2: Per-paper finalization -> FinalSampleRecord
+Phase C2: Per-paper finalization → FinalSampleRecord
+
+The earlier Phase C1 (LLM field-name → MIxS slot mapping) was removed: MIxS
+alignment now happens once at the schema level (env_field_pipeline phase8),
+not per-paper at extraction time.
 """
 
 import asyncio
@@ -23,10 +25,7 @@ from metaagent_run.core import AsyncLocalModelClient, load_json_items
 from .config import RuntimeConfig, load_runtime_config
 from .identity_resolver import resolve_identities
 from .metadata_extractor import extract_table_metadata, extract_section_metadata
-from .processor import (
-    _normalize_metadata_list,
-    llm_normalize_fields,
-)
+from .processor import _normalize_metadata_list
 from .schemas import (
     FinalSampleRecord,
     IdentityMap,
@@ -206,7 +205,6 @@ async def process_paper(
     table_meta = extract_table_metadata(
         metadata_bearing_sections, identity_map, alias_to_accession,
         table_parser, paper_ctx, pmid,
-        upstream_field_to_mixs=upstream.field_to_mixs,
         max_cols=config.table_max_cols,
     )
 
@@ -299,12 +297,7 @@ def finalize_paper(
         if not identity:
             continue
 
-        # Normalize metadata and filter to only MIxS-mapped fields
-        normalized_all = _normalize_metadata_list(metadata_raw, upstream.field_to_mixs)
-        normalized = [m for m in normalized_all if m.mixs_slot is not None]
-        if not normalized:
-            # Fallback: if all filtered out, keep any normalized items
-            normalized = normalized_all
+        normalized = _normalize_metadata_list(metadata_raw)
         if not normalized:
             continue
 
@@ -327,32 +320,6 @@ def finalize_paper(
         samples=final_samples,
         stats=stats,
     )
-
-
-# == Raw field collection (v2 adapter) ==
-
-
-def _collect_raw_fields_v2(
-    all_intermediates: Dict[str, Dict[str, Any]],
-) -> Set[str]:
-    """Collect unique raw field names from v2 intermediate samples_metadata.
-
-    In v2, samples_metadata is Dict[str, List[str]] (accession -> ["field: value", ...]).
-    """
-    fields: Set[str] = set()
-    for pmid, inter in all_intermediates.items():
-        samples_metadata = inter.get("samples_metadata", {})
-        for acc, items in samples_metadata.items():
-            for item in items:
-                # Strip source tag before extracting field name
-                payload = item
-                if "||" in item:
-                    _, _, payload = item.partition("||")
-                key, _, value = payload.partition(":")
-                key = key.strip()
-                if key:
-                    fields.add(key)
-    return fields
 
 
 # == Output ==
@@ -401,7 +368,6 @@ async def main_async(
         expanded_metadata_file=config.expanded_metadata_file,
         env_tag_file=config.env_tag_file,
         env_extraction_targets_file=config.env_extraction_targets_file,
-        schema_discovery_file=config.schema_discovery_file,
     )
 
     papers = _group_by_pmid(items)
@@ -463,40 +429,6 @@ async def main_async(
 
         await asyncio.gather(*(worker(pmid) for pmid in todo_pmids))
         pbar.close()
-
-        # Phase C1: Field normalization (programmatic + LLM fallback)
-        raw_fields = _collect_raw_fields_v2(intermediates)
-
-        if raw_fields:
-            # Filter: only fields NOT already covered by env_targets + synonyms
-            uncovered = {f for f in raw_fields if f.lower() not in upstream.field_to_mixs}
-            covered_count = len(raw_fields) - len(uncovered)
-            print("Phase C1: %d/%d raw fields already covered by synonym expansion, %d uncovered" % (
-                covered_count, len(raw_fields), len(uncovered)))
-
-            llm_mapping = {}
-            if uncovered:
-                print("Phase C1: normalizing %d uncovered fields via LLM..." % len(uncovered))
-                mixs_slots = list(set(upstream.field_to_mixs.values()))
-                llm_mapping = await llm_normalize_fields(
-                    client, uncovered, mixs_slots, config,
-                )
-                for field_lower, slot in llm_mapping.items():
-                    if field_lower not in upstream.field_to_mixs:
-                        upstream.field_to_mixs[field_lower] = slot
-                print("Phase C1: LLM mapped %d additional fields" % len(llm_mapping))
-
-            print("field_to_mixs total: %d entries" % len(upstream.field_to_mixs))
-
-            # Save field normalization debug
-            _save_debug_json(debug_dir, "field_normalization.json", {
-                "raw_fields_total": sorted(raw_fields),
-                "already_covered": sorted(raw_fields - uncovered),
-                "uncovered_sent_to_llm": sorted(uncovered),
-                "llm_mapping_result": llm_mapping,
-                "final_field_to_mixs_count": len(upstream.field_to_mixs),
-            })
-
 
     # Phase C2: Per-paper finalization
     completed_papers: Dict[str, PaperOutput] = dict(done)

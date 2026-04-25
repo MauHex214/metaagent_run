@@ -58,7 +58,6 @@ class AtomicRelation(BaseModel):
 # ═══════════════════════════════════════════════════════════
 
 class NormalizedMetadataItem(BaseModel):
-    mixs_slot: Optional[str] = None       # MIxS 标准 slot 名, None 表示未映射
     raw_field: str                         # 原始字段名
     value: str                             # 值
     source: str = ""                       # 来源: "table_parse" / "llm_extract"
