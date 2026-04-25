@@ -169,43 +169,26 @@ async def process_paper(
         paper_ctx, upstream, max_samples=config.max_samples_for_skeleton
     )
 
-    # Phase A: Alias Discovery (LLM enrichment of skeleton)
-    # Skip LLM if skeleton is too large (>max_samples_for_phase_a unique samples)
-    if len(skeleton_identity_map) > config.max_samples_for_phase_a:
-        from tqdm import tqdm
-        tqdm.write("[Phase A] PMID %s: skipping LLM (%d samples > %d threshold), using skeleton only" % (
-            pmid, len(skeleton_identity_map), config.max_samples_for_phase_a))
-        import copy
-        identity_map = {acc: SampleIdentity(
-            accession=ident.accession, formal_name=ident.formal_name,
-            aliases=list(ident.aliases), parent_project=ident.parent_project,
-            environment=ident.environment,
-        ) for acc, ident in skeleton_identity_map.items()}
-        alias_to_accession = dict(skeleton_alias_to_accession)
-    else:
-        identity_map, alias_to_accession = await resolve_identities(
-            client, paper_ctx, sections, upstream, config,
-            skeleton_identity_map=skeleton_identity_map,
-            skeleton_alias_to_accession=skeleton_alias_to_accession,
-        )
+    # Phase A: Alias Discovery (LLM enrichment of skeleton).
+    # No acc-count threshold: paper-centric design relies on giant-table
+    # filtering at section-ingestion time (build_paper_context) to keep the
+    # acc set bounded by what the paper actually deposits.
+    identity_map, alias_to_accession = await resolve_identities(
+        client, paper_ctx, sections, upstream, config,
+        skeleton_identity_map=skeleton_identity_map,
+        skeleton_alias_to_accession=skeleton_alias_to_accession,
+    )
 
 
     # Phase B1+B2: Table metadata extraction
-    # Only scan metadata-bearing sections (trust step2 relation classification)
-    _METADATA_RELATIONS = frozenset({
-        "accession-metadata", "accession-label-metadata", "label-metadata",
-    })
-    metadata_bearing_sections = [
-        sec for sec in sections
-        if upstream.get_section_relation(
-            pmid, sec.get("section_type", ""), int(sec.get("index", 0)),
-        ) in _METADATA_RELATIONS
-    ]
+    # Use paper_ctx.metadata_sections — already filtered for the 3 metadata-
+    # bearing relations and giant tables (in build_paper_context). No need
+    # to re-filter here; no need to pass max_cols (the giant-table cutoff is
+    # owned by build_paper_context's GIANT_TABLE_MAX_COLS).
     table_parser = StructuredTableParser()
     table_meta = extract_table_metadata(
-        metadata_bearing_sections, identity_map, alias_to_accession,
+        paper_ctx.metadata_sections, identity_map, alias_to_accession,
         table_parser, paper_ctx, pmid,
-        max_cols=config.table_max_cols,
     )
 
     # Phase B3: LLM metadata extraction per section (with identity map)

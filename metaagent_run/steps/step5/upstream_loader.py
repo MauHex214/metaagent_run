@@ -1,5 +1,6 @@
 """统一加载所有上游 step 产物，构建 per-paper context。"""
 
+import hashlib
 import json
 import logging
 from collections import defaultdict
@@ -8,6 +9,15 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _segment_hash(text: str) -> str:
+    """Stable per-segment identifier for disambiguating multiple step2 records
+    that share (section_type, index) but have different text. Used as the
+    second-level key in accession_by_section / step2_metadata_keys_index so
+    we can ask "what accessions did step2 detect in THIS exact segment" rather
+    than "what accessions across all segments at (section_type, index)"."""
+    return hashlib.md5((text or "").encode("utf-8", errors="replace")).hexdigest()
 
 
 # ═══════════════════════════════════════════════════════════
@@ -29,9 +39,13 @@ class UpstreamData:
     step2_labels_index: Dict[str, Dict[Tuple[str, int], List[str]]] = field(default_factory=dict)
 
     # step2: pmid → {(section_type, index) → [metadata_key, ...]}
+    # NOTE: step2 records overwrite by (section_type, index) key — multiple
+    # text segments at the same key collapse, only the last record's data
+    # survives. step5 input texts are not preserved on the step2 side, so
+    # per-segment disambiguation isn't possible. Giant-table filtering at
+    # build_paper_context time uses pre-computed (section_type, index) keys
+    # of giant segments and drops the whole (st, idx) entries.
     step2_metadata_keys_index: Dict[str, Dict[Tuple[str, int], List[str]]] = field(default_factory=dict)
-
-    # step3: pmid → {(section_type, index) → [accession, ...]}
     accession_by_section: Dict[str, Dict[Tuple[str, int], List[str]]] = field(default_factory=dict)
 
     # 外部 DB 验证: accession → {biosample, bioproject, pmid}
@@ -83,16 +97,11 @@ class UpstreamData:
     def get_section_metadata_keys(
         self, pmid: str, section_type: str, index: int
     ) -> List[str]:
-        """Return the list of metadata_key names step2 discovered in this section.
-
-        Used by metadata_extractor to filter the prompt's target_fields block to
-        only those targets actually referenced in the section (matched via phase6
-        aliases), reducing prompt size and improving LLM focus.
-        """
+        """Return the list of metadata_key names step2 discovered in this section."""
         return self.step2_metadata_keys_index.get(pmid, {}).get((section_type, index), [])
 
     def get_all_step3_accessions_for_pmid(self, pmid: str) -> Set[str]:
-        """返回该 paper 中 step3 提取的所有 accession。"""
+        """返回该 paper 中 step3 (=step2) 提取的所有 accession 跨所有段落并集。"""
         result: Set[str] = set()
         for accs in self.accession_by_section.get(pmid, {}).values():
             result.update(accs)
@@ -186,7 +195,23 @@ _ACCESSION_BEARING_RELATIONS = frozenset({
     "accession-label", "accession-metadata", "accession-label-metadata",
 })
 
+# Sections that carry metadata signals (any of: bound to acc directly, bound
+# to label that needs alias bridging, or both). Used by both Phase B1+B2
+# (table parser) and Phase B3 (LLM text extractor) — neither should miss
+# accession-metadata text segments.
+_METADATA_BEARING_RELATIONS = frozenset({
+    "accession-metadata", "accession-label-metadata", "label-metadata",
+})
+
 _TARGET_ENVS = frozenset({"Open_ocean", "Coastal_waters", "Lake", "Wetlands"})
+
+# Single source of truth for the "giant table" cutoff. Sections classified as
+# structured tables with > GIANT_TABLE_MAX_COLS columns are skipped wholesale:
+# their accs don't enter verified_accessions, their step2 metadata_keys are
+# dropped from section_metadata_keys, and they're not passed to either Phase
+# B1+B2 (table extraction) or Phase B3 (LLM extraction). One number controls
+# the entire policy — do NOT introduce a separate threshold downstream.
+GIANT_TABLE_MAX_COLS: int = 50
 
 
 def _filter_others_accessions(
@@ -318,56 +343,94 @@ def build_paper_context(
     pmid: str,
     sections: List[Dict[str, Any]],
     upstream: UpstreamData,
+    giant_table_max_cols: int = GIANT_TABLE_MAX_COLS,
 ) -> "PaperContext":
-    """为单篇 paper 构建完整上下文。
+    """为单篇 paper 构建完整上下文（0408 design, paper-centric）。
 
-    1. 已验证 accession = step3 提取 ∩ 外部 DB 验证 ∩ env_tag 非 Others
-    2. accession → env 映射（accession 级别环境标注）
-    3. target fields = 该 paper 所有目标环境的 tier1/tier2 并集
-    4. Section 分组 = accession-bearing / metadata-bearing（按 step2 关系类型）
-    5. Sample hints（排除 Others）
+    Single-pass section iteration with early skip of giant tables (列数 > N).
+    Giant tables are dropped entirely from all downstream processing — their
+    accessions don't enter verified_accessions, their metadata isn't extracted,
+    their step2_keys aren't used. This keeps reference-citation accessions
+    (e.g., a 454-column TARA Ocean Table S5) out of the paper context, so
+    Phase A LLM enrichment runs on the paper's actual deposits only.
+
+    Sections without semicolon-joined giant-table cutoff:
+      1. acc 收集: step2 检测到的 acc per non-giant section (paper-mentioned)
+      2. env_tag_v2 过滤 (drop "Others")
+      3. accession → env 映射
+      4. target fields = 所有目标环境的并集
+      5. Section 分组 = accession-bearing / metadata-bearing
     """
     from .schemas import PaperContext
+    from .table_parser import StructuredTableParser
 
-    # 1. 已验证 accession 交集
-    step3_accs = upstream.get_all_step3_accessions_for_pmid(pmid)
-    db_verified = upstream.get_verified_accessions_for_pmid(pmid)
-    verified_accessions = step3_accs & db_verified
+    table_parser = StructuredTableParser()
 
-    # 1b. 过滤 Others：只保留目标水圈环境的 accession
+    # Pre-compute (section_type, index) keys that contain ANY giant-table
+    # segment. step2 records collapse by (sec_type, idx), so for the dict-
+    # based acc lookup we must drop the whole (st, idx) entry — we can't
+    # know per-segment which accs came from the giant vs sibling segments.
+    giant_keys: Set[Tuple[str, int]] = set()
+    for sec in sections:
+        if (table_parser.is_structured_table(sec)
+                and table_parser.count_columns(sec) > giant_table_max_cols):
+            giant_keys.add((sec.get("section_type", ""),
+                            int(sec.get("index", 0))))
+
+    verified_accessions: Set[str] = set()
+    accession_sections: List[Dict[str, Any]] = []
+    metadata_sections: List[Dict[str, Any]] = []
+    section_metadata_keys: Dict[Any, List[str]] = {}
+
+    pmid_acc_idx = upstream.accession_by_section.get(pmid, {})
+    pmid_keys_idx = upstream.step2_metadata_keys_index.get(pmid, {})
+
+    # Acc collection: iterate the (st, idx)-keyed dict, skip giant keys.
+    # Required because the dict collapses; can't tell which segment's accs
+    # survive on collision.
+    for sec_key, accs in pmid_acc_idx.items():
+        if sec_key in giant_keys:
+            continue
+        verified_accessions.update(accs)
+
+    for sec_key, keys in pmid_keys_idx.items():
+        if sec_key in giant_keys:
+            continue
+        if keys:
+            section_metadata_keys[sec_key] = keys
+
+    # Section classification — disjoint partition.
+    # Per-segment giant-skip here (NOT (st, idx)-level) so non-giant siblings
+    # of a giant table (e.g., a 6-col Table S1 sharing supplementary-2 with
+    # a 454-col Table S5) still flow into B1+B2 / B3 input.
+    for sec in sections:
+        if (table_parser.is_structured_table(sec)
+                and table_parser.count_columns(sec) > giant_table_max_cols):
+            continue   # skip THIS giant section, keep siblings
+        sec_type = sec.get("section_type", "")
+        sec_idx = int(sec.get("index", 0))
+        relation = upstream.get_section_relation(pmid, sec_type, sec_idx)
+        if relation == "accession-label":
+            accession_sections.append(sec)
+        elif relation in _METADATA_BEARING_RELATIONS:
+            metadata_sections.append(sec)
+
+    # env_tag_v2 过滤 (step4_accession's LLM-inferred target-env set)
     verified_accessions = _filter_others_accessions(verified_accessions, upstream)
 
-    # 2. accession → env 映射
+    # accession → env 映射
     accession_to_env = _build_accession_to_env(verified_accessions, upstream)
 
-    # 3. target fields = 所有目标环境的并集
+    # target fields = 所有目标环境的并集
     involved_envs = set(accession_to_env.values())
     if not involved_envs:
-        # fallback: 用投票主导环境
         dom_env = upstream.get_dominant_env(pmid)
         if dom_env != "unknown":
             involved_envs = {dom_env}
     tier1, tier2, target_aliases = _get_union_target_fields(involved_envs, upstream)
 
-    # 4. Section 分组
-    accession_sections: List[Dict[str, Any]] = []
-    metadata_sections: List[Dict[str, Any]] = []
-    for sec in sections:
-        sec_type = sec.get("section_type", "")
-        sec_idx = int(sec.get("index", 0))
-        relation = upstream.get_section_relation(pmid, sec_type, sec_idx)
-        if relation in _ACCESSION_BEARING_RELATIONS:
-            accession_sections.append(sec)
-        elif relation == "label-metadata":
-            metadata_sections.append(sec)
-
-    # 5. 环境（paper 级，用于 PaperOutput 输出标注）
     env = upstream.get_dominant_env(pmid)
-
     step2_labels = upstream.get_all_labels_for_pmid(pmid)
-
-    # Per-section step2 metadata_keys_found (for section-level target filter)
-    section_metadata_keys = dict(upstream.step2_metadata_keys_index.get(pmid, {}))
 
     return PaperContext(
         pmid=pmid,
@@ -556,11 +619,9 @@ def load_upstream(
             rel = item.get("relation", "unknown")
             key = (item.get("section_type", ""), int(item.get("index", 0)))
             ud.relation_index.setdefault(pmid, {})[key] = rel
-            # ── NEW: load entity annotations from Step 2 ──
             accs = item.get("accessions_found", [])
             if accs:
                 ud.step2_accessions_index.setdefault(pmid, {})[key] = accs
-                # Also fill accession_by_section (Method A: replaces Step 3a data source)
                 ud.accession_by_section.setdefault(pmid, {})[key] = accs
             labels = item.get("labels_found", [])
             if labels:
@@ -570,7 +631,7 @@ def load_upstream(
                 ud.step2_metadata_keys_index.setdefault(pmid, {})[key] = meta_keys
         LOGGER.info("Loaded step2 relation: %d records", len(items))
 
-    # ── step3 accession ───────────────────────────────────
+    # ── step3 accession (legacy path; rarely used in 0408) ──
     if accession_file and Path(accession_file).exists():
         with open(accession_file, "r", encoding="utf-8") as f:
             items = json.load(f)
@@ -586,6 +647,12 @@ def load_upstream(
         ))
 
     # ── 外部 DB 验证 accession list ───────────────────────
+    # Used as a horizontal lookup (acc → biosample/bioproject) for table-column
+    # alias bridging. The last-column pmid is intentionally NOT split on ";":
+    # in 0408 design, "this paper's accessions" comes from step2 detection in
+    # paper text, not from reverse pmid lookup against this file. The legacy
+    # verified_acc_by_pmid index is kept for backward compatibility but no
+    # longer consulted by build_paper_context.
     if accession_list_file and Path(accession_list_file).exists():
         with open(accession_list_file, "r", encoding="utf-8") as f:
             for line in f:

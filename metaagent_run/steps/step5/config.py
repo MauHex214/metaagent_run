@@ -29,11 +29,14 @@ TEXT_CHUNK_SIZE: Final[int] = 12000      # 每块最大字符数
 TEXT_OVERLAP: Final[int] = 200           # 相邻块重叠字符数
 
 # ── 表格解析 ──────────────────────────────────────────────
-TABLE_MAX_COLS: Final[int] = 30         # 列数 > 此值直接跳过
+# Note: giant-table cutoff (列数 > N 直接跳过) lives in
+# upstream_loader.GIANT_TABLE_MAX_COLS — single source of truth applied at
+# section ingestion time. Don't add a duplicate threshold here.
 
 # ── Identity 阈值 ───────────────────────────────────────
-MAX_SAMPLES_FOR_SKELETON: Final[int] = 50   # BioSample 去重后 > 此值触发压缩
-MAX_SAMPLES_FOR_PHASE_A: Final[int] = 100   # 压缩后仍 > 此值跳过 Phase A LLM
+MAX_SAMPLES_FOR_SKELETON: Final[int] = 50   # BioSample 压缩触发阈值
+# (Phase A LLM no longer has an acc-count cap — paper-centric design relies
+# on giant-table filtering to keep the acc set bounded.)
 
 # ── 并发 ─────────────────────────────────────────────────
 PAPER_CONCURRENCY: Final[int] = 8      # 同时处理的论文数
@@ -67,11 +70,8 @@ class RuntimeConfig:
     # 文本切分
     text_chunk_size: int = TEXT_CHUNK_SIZE
     text_overlap: int = TEXT_OVERLAP
-    # 表格
-    table_max_cols: int = TABLE_MAX_COLS
     # Identity 阈值
     max_samples_for_skeleton: int = MAX_SAMPLES_FOR_SKELETON
-    max_samples_for_phase_a: int = MAX_SAMPLES_FOR_PHASE_A
     # 并发
     paper_concurrency: int = PAPER_CONCURRENCY
     section_concurrency: int = SECTION_CONCURRENCY

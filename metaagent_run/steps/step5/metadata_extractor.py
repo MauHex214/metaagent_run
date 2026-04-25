@@ -26,7 +26,7 @@ from metaagent_run.core import (
 from .config import RuntimeConfig
 from .schemas import IdentityMap, PaperContext, SampleIdentity
 from .table_parser import StructuredTableParser
-from .upstream_loader import UpstreamData
+from .upstream_loader import GIANT_TABLE_MAX_COLS, UpstreamData
 
 LOGGER = logging.getLogger(__name__)
 
@@ -438,12 +438,16 @@ def extract_table_metadata(
     table_parser: StructuredTableParser,
     paper_ctx: PaperContext,
     pmid: str,
-    max_cols: int = 50,
+    max_cols: int = GIANT_TABLE_MAX_COLS,
 ) -> Dict[str, List[str]]:
     """
     Phase B1+B2: Extract metadata from structured tables and map to accessions.
 
-    Deterministic keyword-based approach (zero LLM calls):
+    Deterministic keyword-based approach (zero LLM calls). Callers from
+    process_paper pass paper_ctx-filtered sections (already without giant
+    tables); the inner max_cols check below is a defensive guard for
+    out-of-pipeline callers that bypass build_paper_context.
+
     - Layer 1: normalize_table_text (in table_parser)
     - Layer 2: column count hard cutoff (> max_cols → skip)
     - Dual-run strategy: try both normal and transposed, keep whichever yields more metadata
