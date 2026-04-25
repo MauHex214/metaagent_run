@@ -28,7 +28,12 @@ from pathlib import Path
 from metaagent_run.steps.env_field_pipeline import config as ep_config
 from metaagent_run.steps.env_field_pipeline.phase7_validation import PHASE7_DIR
 
-ENV6_V1_PATH = ep_config.OUTPUT_DIR / "env6_extraction_targets.json"
+import os
+# Default base = v1b (raw_key_expansion injected) if it exists, else v1.
+_V1B = ep_config.OUTPUT_DIR / "env6_extraction_targets_v1b.json"
+_V1 = ep_config.OUTPUT_DIR / "env6_extraction_targets.json"
+ENV6_V1_PATH = Path(os.environ.get("PHASE7_ENV6_PATH",
+                                   str(_V1B if _V1B.exists() else _V1)))
 ENV6_V2_PATH = ep_config.OUTPUT_DIR / "env6_extraction_targets_v2.json"
 DIFF_PATH = ep_config.OUTPUT_DIR / "env6_v1_to_v2_diff.csv"
 SUCCESS_CSV = PHASE7_DIR / "extraction_success_cumulative.csv"

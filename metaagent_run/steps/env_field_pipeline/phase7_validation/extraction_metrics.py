@@ -40,7 +40,12 @@ from metaagent_run.steps.env_field_pipeline.phase7_validation import (
     ensure_phase7_dir,
 )
 
-ENV6_PATH = ep_config.OUTPUT_DIR / "env6_extraction_targets.json"
+import os
+# Default to v1b (raw_key_expansion injected) if it exists, else v1.
+_V1B = ep_config.OUTPUT_DIR / "env6_extraction_targets_v1b.json"
+_V1 = ep_config.OUTPUT_DIR / "env6_extraction_targets.json"
+ENV6_PATH = Path(os.environ.get("PHASE7_ENV6_PATH",
+                                str(_V1B if _V1B.exists() else _V1)))
 SAMPLE_FAILURE_LIMIT = 10  # cap failure pmids in CSV cell
 
 

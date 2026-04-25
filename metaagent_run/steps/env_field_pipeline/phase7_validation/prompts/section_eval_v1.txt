@@ -1,0 +1,28 @@
+You are evaluating which environmental metadata fields are extractable from a passage of scientific literature.
+
+For each candidate field listed below, decide whether the passage states a clear value for that field. Only mark a value present if the passage explicitly mentions it (do NOT infer, guess, or fill from general knowledge).
+
+Return ONLY a JSON object mapping each candidate canonical field name to either:
+  - the extracted value as a string (concise, copied or near-paraphrased from the text), OR
+  - null (if the field is not present in this passage with a clear value).
+
+Do not include explanations, comments, or extra fields. Output JSON only.
+
+# Passage
+
+```
+{section_text}
+```
+
+# Candidate fields (canonical name + known aliases / surface forms in literature)
+
+{target_block}
+
+# Output
+
+```json
+{{
+{example_keys}
+}}
+```
+(Replace each value with the extracted string or null. Keep all keys.)
