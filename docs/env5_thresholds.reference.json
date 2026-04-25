@@ -1,0 +1,15 @@
+{
+  "_comment": "Reference configuration for phase5 classification thresholds.",
+  "_usage": "Copy this file to env_field_pipeline_output/env5_thresholds.json before running phase5, OR rely on phase5.py DEFAULT_THRESHOLDS (which mirrors these values).",
+  "_version_history": {
+    "v1_cross10": "initial setting; main list 405; admits descriptive low-PMID fields",
+    "v2_cross30": "current; main list 210; retains numeric fields PMID 30-49 (mixed_layer_depth, ice_thickness, secchi_disk_depth, sediment_mean_grain_size, porewater_salinity, soil_organic_carbon, ...) while dropping low-coverage noise"
+  },
+  "H_universal_min": 0.85,
+  "pmid_universal_min": 50,
+  "pmid_cross_min": 30,
+  "H_signature_max": 0.40,
+  "dominant_share_min": 0.70,
+  "pmid_signature_min": 5,
+  "granularity_mode": "coarse"
+}

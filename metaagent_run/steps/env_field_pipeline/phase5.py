@@ -43,14 +43,31 @@ PHASE5_THRESHOLDS = config.OUTPUT_DIR / "env5_thresholds.json"
 PHASE5_CANONICAL_CLASSIFIED = config.OUTPUT_DIR / "env5_canonical_classified.csv"
 
 
+# Final thresholds adopted after sensitivity analysis on cross_min ∈ {10, 30, 50}
+# (see docs/env5_thresholds.reference.json for the canonical config and
+# docs/phase6_decisions.md §H_norm/dom_share rationale).
+#
+# Decision rationale:
+#   - pmid_universal_min=50: a universal field must have ≥50-paper coverage
+#     across well-distributed environments (H_norm ≥ 0.85)
+#   - pmid_cross_min=30:    chosen to retain numeric fields like
+#     mixed_layer_depth, ice_thickness, secchi_disk_depth, sediment_mean_grain_size,
+#     porewater_salinity (all PMID 30-49); cross_min=50 would drop ~150 numeric
+#     fields, cross_min=10 admits too many low-coverage descriptive fields.
+#   - pmid_signature_min=5: signature fields are inherently rare per environment
+#     (e.g. peat_depth=22 in wetlands, lake_area=87 in lakes); 5 is a low but
+#     defensible floor for "sub-environment-specific" claim.
+#   - granularity_mode='coarse': merge bag variants (e.g. salinity / surface_salinity
+#     / bottom_salinity) into a single target with `merged_bag_variants` log;
+#     keeps the main list scale aligned with downstream step5 prompt budget.
 DEFAULT_THRESHOLDS: dict[str, Any] = {
     "H_universal_min": 0.85,
     "pmid_universal_min": 50,
-    "pmid_cross_min": 10,
+    "pmid_cross_min": 30,
     "H_signature_max": 0.4,
     "dominant_share_min": 0.7,
     "pmid_signature_min": 5,
-    "granularity_mode": "fine",  # fine | coarse
+    "granularity_mode": "coarse",  # fine | coarse
 }
 
 
